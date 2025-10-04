@@ -1,0 +1,671 @@
+openapi: 3.0.3
+info:
+  title: Expense Management API
+  description: |
+    REST API for expense management system with multi-step approval workflows.
+    
+    **Features:**
+    - JWT-based authentication
+    - Role-based access control (Admin, Manager, Employee)
+    - Expense submission and tracking
+    - Multi-step approval workflows
+    - OCR receipt parsing
+    - Currency and country integration
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@expensemanagement.com
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+  - url: https://api.expensemanagement.com
+    description: Production server
+
+tags:
+  - name: Authentication
+    description: User authentication and registration
+  - name: Users
+    description: User management operations
+  - name: Expenses
+    description: Expense submission and retrieval
+  - name: Approvals
+    description: Approval workflow operations
+  - name: OCR
+    description: Receipt OCR parsing
+  - name: Integration
+    description: External API integrations
+
+security:
+  - bearerAuth: []
+
+paths:
+  /api/auth/signup:
+    post:
+      tags:
+        - Authentication
+      summary: Register new user
+      description: Creates a new user. First signup for a company automatically creates the company and sets user as Admin.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignupRequest'
+      responses:
+        '200':
+          description: Successful registration
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '400':
+          description: Invalid request or email already exists
+
+  /api/auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: User login
+      description: Authenticate user and receive JWT token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Successful login
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          description: Invalid credentials
+
+  /api/users:
+    get:
+      tags:
+        - Users
+      summary: Get all users
+      description: Retrieve all users in the same company (Admin/Manager only)
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserResponse'
+        '403':
+          description: Forbidden - requires Admin or Manager role
+    
+    post:
+      tags:
+        - Users
+      summary: Create new user
+      description: Create a new user in the company (Admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+      responses:
+        '200':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+        '403':
+          description: Forbidden - requires Admin role
+
+  /api/users/me:
+    get:
+      tags:
+        - Users
+      summary: Get current user
+      description: Retrieve details of the authenticated user
+      responses:
+        '200':
+          description: Current user details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserResponse'
+
+  /api/users/role/{role}:
+    get:
+      tags:
+        - Users
+      summary: Get users by role
+      description: Retrieve users with a specific role (Admin/Manager only)
+      parameters:
+        - name: role
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [ADMIN, MANAGER, EMPLOYEE]
+      responses:
+        '200':
+          description: List of users with the specified role
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserResponse'
+
+  /api/expenses:
+    post:
+      tags:
+        - Expenses
+      summary: Submit expense
+      description: Submit a new expense for approval
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitExpenseRequest'
+      responses:
+        '200':
+          description: Expense submitted successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExpenseResponse'
+        '400':
+          description: Invalid request
+
+  /api/expenses/my:
+    get:
+      tags:
+        - Expenses
+      summary: Get my expenses
+      description: Retrieve all expenses for the authenticated user
+      responses:
+        '200':
+          description: List of user's expenses
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ExpenseResponse'
+
+  /api/expenses/my/status/{status}:
+    get:
+      tags:
+        - Expenses
+      summary: Get expenses by status
+      description: Retrieve user's expenses filtered by status
+      parameters:
+        - name: status
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [PENDING, APPROVED, REJECTED]
+      responses:
+        '200':
+          description: List of expenses with specified status
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ExpenseResponse'
+
+  /api/expenses/{id}:
+    get:
+      tags:
+        - Expenses
+      summary: Get expense by ID
+      description: Retrieve a specific expense by ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Expense details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExpenseResponse'
+        '404':
+          description: Expense not found
+
+  /api/expenses/pending:
+    get:
+      tags:
+        - Expenses
+      summary: Get pending expenses
+      description: Retrieve all pending expenses for the company (Admin/Manager only)
+      responses:
+        '200':
+          description: List of pending expenses
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ExpenseResponse'
+        '403':
+          description: Forbidden - requires Admin or Manager role
+
+  /api/approvals/pending:
+    get:
+      tags:
+        - Approvals
+      summary: Get pending approvals
+      description: Retrieve pending approval steps for the authenticated user (Admin/Manager only)
+      responses:
+        '200':
+          description: List of pending approval steps
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ApprovalStepResponse'
+
+  /api/approvals/expense/{expenseId}:
+    get:
+      tags:
+        - Approvals
+      summary: Get approval steps for expense
+      description: Retrieve all approval steps for a specific expense
+      parameters:
+        - name: expenseId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: List of approval steps
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ApprovalStepResponse'
+
+  /api/approvals/{stepId}:
+    put:
+      tags:
+        - Approvals
+      summary: Process approval
+      description: Approve or reject an expense (Admin/Manager only)
+      parameters:
+        - name: stepId
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApprovalDecisionRequest'
+      responses:
+        '200':
+          description: Approval processed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalStepResponse'
+        '403':
+          description: Forbidden or not authorized to approve this step
+        '404':
+          description: Approval step not found
+
+  /api/ocr/parse-receipt:
+    post:
+      tags:
+        - OCR
+      summary: Parse receipt image
+      description: Upload receipt image and extract expense details (returns mock data in MVP)
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: Receipt parsed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OcrResponse'
+        '400':
+          description: Invalid file or file too large
+
+  /api/integration/countries:
+    get:
+      tags:
+        - Integration
+      summary: Get countries with currencies
+      description: Retrieve all countries and their default currencies
+      security: []
+      responses:
+        '200':
+          description: List of countries with currencies
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CountryResponse'
+
+  /api/integration/currency-rates/{baseCurrency}:
+    get:
+      tags:
+        - Integration
+      summary: Get currency exchange rates
+      description: Retrieve exchange rates for a base currency
+      security: []
+      parameters:
+        - name: baseCurrency
+          in: path
+          required: true
+          schema:
+            type: string
+          example: USD
+      responses:
+        '200':
+          description: Exchange rates
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CurrencyRateResponse'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    SignupRequest:
+      type: object
+      required:
+        - email
+        - password
+        - fullName
+        - companyName
+        - country
+      properties:
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        password:
+          type: string
+          minLength: 6
+          example: password123
+        fullName:
+          type: string
+          example: John Doe
+        companyName:
+          type: string
+          example: Acme Corp
+        country:
+          type: string
+          example: United States
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        password:
+          type: string
+          example: password123
+
+    AuthResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+        email:
+          type: string
+          example: user@example.com
+        fullName:
+          type: string
+          example: John Doe
+        role:
+          type: string
+          enum: [ADMIN, MANAGER, EMPLOYEE]
+        userId:
+          type: integer
+          format: int64
+
+    CreateUserRequest:
+      type: object
+      required:
+        - email
+        - password
+        - fullName
+        - role
+        - companyId
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 6
+        fullName:
+          type: string
+        role:
+          type: string
+          enum: [ADMIN, MANAGER, EMPLOYEE]
+        companyId:
+          type: integer
+          format: int64
+        managerId:
+          type: integer
+          format: int64
+          nullable: true
+
+    UserResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        email:
+          type: string
+        fullName:
+          type: string
+        role:
+          type: string
+          enum: [ADMIN, MANAGER, EMPLOYEE]
+        companyId:
+          type: integer
+          format: int64
+        companyName:
+          type: string
+        managerId:
+          type: integer
+          format: int64
+          nullable: true
+        managerName:
+          type: string
+          nullable: true
+
+    SubmitExpenseRequest:
+      type: object
+      required:
+        - amount
+        - currency
+        - category
+        - expenseDate
+      properties:
+        amount:
+          type: number
+          format: decimal
+          example: 150.00
+        currency:
+          type: string
+          example: USD
+        category:
+          type: string
+          example: Office Supplies
+        description:
+          type: string
+          example: Laptop accessories
+        expenseDate:
+          type: string
+          format: date
+          example: 2025-10-01
+        receiptImageUrl:
+          type: string
+          nullable: true
+          example: https://storage.example.com/receipts/123.jpg
+
+    ExpenseResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        userId:
+          type: integer
+          format: int64
+        userFullName:
+          type: string
+        amount:
+          type: number
+          format: decimal
+        currency:
+          type: string
+        category:
+          type: string
+        description:
+          type: string
+        expenseDate:
+          type: string
+          format: date
+        receiptImageUrl:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [PENDING, APPROVED, REJECTED]
+        createdAt:
+          type: string
+          format: date-time
+
+    ApprovalDecisionRequest:
+      type: object
+      required:
+        - decision
+      properties:
+        decision:
+          type: string
+          enum: [APPROVED, REJECTED]
+        comments:
+          type: string
+          nullable: true
+
+    ApprovalStepResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        expenseId:
+          type: integer
+          format: int64
+        approverId:
+          type: integer
+          format: int64
+        approverName:
+          type: string
+        sequence:
+          type: integer
+        decision:
+          type: string
+          enum: [PENDING, APPROVED, REJECTED]
+        comments:
+          type: string
+          nullable: true
+        decidedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    OcrResponse:
+      type: object
+      properties:
+        amount:
+          type: number
+          format: decimal
+        date:
+          type: string
+          format: date
+        vendor:
+          type: string
+        category:
+          type: string
+        confidence:
+          type: number
+          format: double
+          description: OCR confidence score (0-1)
+
+    CountryResponse:
+      type: object
+      properties:
+        countries:
+          type: object
+          additionalProperties:
+            type: string
+          example:
+            "United States": "USD"
+            "United Kingdom": "GBP"
+            "India": "INR"
+
+    CurrencyRateResponse:
+      type: object
+      properties:
+        baseCurrency:
+          type: string
+          example: USD
+        rates:
+          type: object
+          additionalProperties:
+            type: number
+            format: decimal
+          example:
+            EUR: 0.92
+            GBP: 0.79
+            INR: 83.12
